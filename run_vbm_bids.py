@@ -1,6 +1,6 @@
 """************************** run_vbm_bids.py ****************"""
 """ This script runs vbm pipeline on BIDS anatomical data using spm12 standalone and Matlab common runtime"""
-"""Example run of the code- python3 /computation/run_vbm_bids.py --run '{"inputBidsDir":"/computation/test_bids_input_data","tempWriteDir":"/computation/"}'"""
+"""Example run of the code- python3 /computation/run_vbm_bids.py --run '{"inputBidsDir":"/computation/test_bids_input_data","tempWriteDir":"/computation"}'"""
 """ Input args: --run json (this json structure may involve different field for different run) """
 """ output: json """
 
@@ -48,12 +48,20 @@ if __name__=='__main__':
         ## Loop through each of the T1w*.nii.gz file to run the algorithm, this algorithm runs serially ##
         i = 0  # variable for looping
         count_success = 0  # variable for counting how many subjects were successfully run
+        
+        #create dirs array to store output directories where vbm spm12 data is written to
+        dirs=[]
+        
+        #create wc1files array to store paths to wc1 files for each subject
+        wc1files=[]
+        
         while i < len(smri_data):
             gzip_file_path = smri_data[i]
             i = i + 1
 
             # Extract subject directory name from the T1w*.nii.gz files
-            sub_id = os.path.dirname(os.path.dirname(gzip_file_path))
+            sub_path = (os.path.dirname(os.path.dirname(gzip_file_path))).split('/')
+            sub_id='/'.join(sub_path[2:len(sub_path)])
 
             vbm_out = temp_write_dir + '/' + sub_id + '/anat'
             nii_output = (gzip_file_path.split('/')[-1]).split('.gz')[0]
@@ -153,9 +161,11 @@ if __name__=='__main__':
                 # Run the VBM pipeline
                 if os.path.exists(nifti_file):
                     res = vbm_preprocess.run()
+                    dirs.append(os.path.join(vbm_out + "/vbm_spm12"))
+                    wc1files.append(glob.glob(vbm_out + "/vbm_spm12/wc1*nii")[0])
 
                 # Calculate correlation coefficent of swc1*nii to SPM12 TPM.nii
-                t_file = glob.glob(vbm_out + "/vbm_spm12/swc1*nii")
+                segmented_file = glob.glob(vbm_out + "/vbm_spm12/swc1*nii")
                 corr_value = corr.get_corr(tpm_path, segmented_file[0])
 
                 ## Write a text file that desribes what the output files are ##
@@ -195,7 +205,7 @@ if __name__=='__main__':
                 # On the last subject in the BIDS directory , write the success status output to json object
                 if gzip_file_path == smri_data[-1]:
                     if count_success > 0: status = True  # If atleast 1 scan in the BIDS directory finishes successfully
-                    sys.stdout.write(json.dumps({"output": {"success": status}}))
+                    sys.stdout.write(json.dumps({"output": {"success": status,"vbmdirs":dirs,"wc1files":wc1files}}, indent=4, separators=(',', ': ')))
 
 
     # If input_bids_dir is not in BIDS format and does not have T1w data and no write permissions to tmp write dir then
@@ -204,4 +214,4 @@ if __name__=='__main__':
         status = True
         sys.stderr.write(
             "Make sure data is in BIDS format,T1w images exist and space is available on the system to write outputs")
-        sys.stdout.write(json.dumps({"output": {"success": status}}))
+        sys.stdout.write(json.dumps({"output": {"success": status}}, indent=4, separators=(',', ': ')))
